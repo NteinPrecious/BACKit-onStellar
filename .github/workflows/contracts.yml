@@ -86,6 +86,11 @@ jobs:
           cd packages/contracts
           stellar contract build
 
+      - name: Check WASM size limit
+        run: |
+          cd packages/contracts
+          bash scripts/build-optimized.sh --check
+
       - name: Report sccache Stats
         run: sccache --show-stats
 

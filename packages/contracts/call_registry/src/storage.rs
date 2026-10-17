@@ -292,7 +292,10 @@ pub fn record_call_created(env: &Env) {
 
 pub fn record_stake(env: &Env, staker: &Address, amount: i128) {
     let mut stats = get_global_stats(env);
-    stats.total_stake_volume += amount;
+    stats.total_stake_volume = stats
+        .total_stake_volume
+        .checked_add(amount)
+        .unwrap_or_else(|| crate::errors::overflow(env));
 
     let seen_key = DataKey::GlobalStakerSeen(staker.clone());
     if !env.storage().persistent().has(&seen_key) {

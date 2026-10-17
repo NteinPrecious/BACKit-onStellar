@@ -1765,3 +1765,40 @@ fn test_claim_on_behalf_fails_when_paused() {
     assert_contract_error(result, OutcomeError::ContractPaused);
 }
 
+
+const SUBMIT_OUTCOME_BUDGET_CPU: u64 = 900_000;
+const SUBMIT_OUTCOME_BUDGET_MEM: u64 = 60_000;
+
+/// `submit_outcome` (single oracle, quorum of 1, so it also finalises and calls
+/// the registry) measured at ~739k CPU / ~44k bytes; ed25519 verification alone is
+/// ~436k CPU of that, so the ceiling sits ~20% above the measured figure.
+#[test]
+fn test_submit_outcome_stays_within_budget() {
+    let env = Env::default();
+    let (_admin, registry_id, secret, pubkey, client) = setup_single_oracle(&env);
+    let signed = SignedOutcome {
+        call_id: 3,
+        outcome: 1,
+        price: 100,
+        timestamp: 1000,
+        oracle_pubkey: pubkey,
+        signature: sign_outcome(&env, &secret, 3, 1, 100, 1000),
+    };
+
+    let usage = measure_budget(
+        &env,
+        SUBMIT_OUTCOME_BUDGET_CPU,
+        SUBMIT_OUTCOME_BUDGET_MEM,
+        || {
+            client.submit_outcome(&registry_id, &signed, &0u64);
+        },
+    );
+
+    std::println!(
+        "outcome_manager::submit_outcome cpu={} mem={}",
+        usage.cpu,
+        usage.mem
+    );
+    assert!(usage.cpu <= SUBMIT_OUTCOME_BUDGET_CPU);
+    assert!(usage.mem <= SUBMIT_OUTCOME_BUDGET_MEM);
+}

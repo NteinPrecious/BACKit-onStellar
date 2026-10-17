@@ -108,6 +108,9 @@ const MAX_CALL_PAGE_SIZE: u32 = 20;
 const MAX_CALL_STAKERS_PAGE_SIZE: u32 = 50;
 pub const CONTRACT_VERSION: u32 = 1;
 
+/// A call supports between 2 and this many outcome pools.
+pub const MAX_OUTCOME_COUNT: u32 = 32;
+
 /// CallRegistry contract implementation.
 /// Manages prediction calls and staking on market outcomes.
 #[contract]
@@ -228,7 +231,7 @@ impl CallRegistry {
     /// # Errors
     /// * [`CallRegistryError::InvalidStakeAmount`] – `stake_amount` ≤ 0.
     /// * [`CallRegistryError::InvalidEndTime`] – `end_ts` is not in the future.
-    /// * [`CallRegistryError::InvalidOutcomeCount`] – `outcome_count` < 2.
+    /// * [`CallRegistryError::InvalidOutcomeCount`] – `outcome_count` outside 2..=32.
     pub fn create_call(
         env: Env,
         creator: Address,
@@ -265,7 +268,7 @@ impl CallRegistry {
             return Err(CallRegistryError::InvalidStakeAmount);
         }
 
-        if outcome_count < 2 {
+        if !(2..=MAX_OUTCOME_COUNT).contains(&outcome_count) {
             return Err(CallRegistryError::InvalidOutcomeCount);
         }
 
@@ -640,7 +643,10 @@ impl CallRegistry {
         let mut outcome_stakers = call.stakes.get(position).unwrap_or_else(|| Map::new(&env));
         let staker_key = staker.clone();
         let current_staker_stake = outcome_stakers.get(staker_key.clone()).unwrap_or(0);
-        let updated_staker_stake = current_staker_stake + amount;
+        // Checked: an enormous stake must be refused with a typed error, not trap.
+        let updated_staker_stake = current_staker_stake
+            .checked_add(amount)
+            .ok_or(CallRegistryError::Overflow)?;
 
         // Reputation-weighted individual stake cap (per call, per position).
         // Replaces the old flat `max_stake_per_user`-only check: the user's
@@ -678,7 +684,12 @@ impl CallRegistry {
 
         // Update stake maps with generalized position support
         let current_total = call.outcome_stakes.get(position).unwrap_or(0);
-        call.outcome_stakes.set(position, current_total + amount);
+        call.outcome_stakes.set(
+            position,
+            current_total
+                .checked_add(amount)
+                .ok_or(CallRegistryError::Overflow)?,
+        );
 
         outcome_stakers.set(staker_key.clone(), updated_staker_stake);
         call.stakes.set(position, outcome_stakers);

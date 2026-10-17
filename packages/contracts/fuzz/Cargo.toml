@@ -1,0 +1,30 @@
+[package]
+name = "backit-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "cargo-fuzz harness for call creation, staking and settlement maths (issue #700)."
+
+[package.metadata]
+cargo-fuzz = true
+
+# This crate is its own workspace on purpose: it needs a nightly toolchain and
+# libFuzzer, so it must not be part of `cargo test --workspace` in CI.
+[workspace]
+
+[lib]
+name = "backit_fuzz"
+path = "src/lib.rs"
+
+[dependencies]
+arbitrary = { version = "1", features = ["derive"] }
+libfuzzer-sys = "0.4"
+soroban-sdk = { version = "23.0.0", features = ["testutils"] }
+call-registry = { path = "../call_registry" }
+
+[[bin]]
+name = "market_settlement"
+path = "fuzz_targets/market_settlement.rs"
+test = false
+doc = false
+bench = false

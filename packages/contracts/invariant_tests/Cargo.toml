@@ -15,3 +15,8 @@ path = "src/lib.rs"
 # No [dependencies] needed: model/generator/assertions are stdlib-only.
 # Add Soroban dev-dependencies here when contract-client differential tests
 # are wired up in a future iteration.
+
+[dev-dependencies]
+# Property-based tests (issue #699): shrinking, replayable failures, and a
+# configurable case count (`PROPTEST_CASES`) on top of the model.
+proptest = { version = "1.5", default-features = false, features = ["std"] }

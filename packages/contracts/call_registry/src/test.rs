@@ -1759,6 +1759,58 @@ mod call_registry {
         client.claim_void_refund(&non_staker, &call.id);
     }
 
+    // ── SC-038: extreme values return typed errors ─────────────────────────────
+
+    #[test]
+    fn test_stake_overflow_returns_a_typed_error_instead_of_trapping() {
+        let (env, client, _admin, _om) = setup();
+        env.ledger().set_timestamp(1000);
+        let creator = Address::generate(&env);
+        let staker = Address::generate(&env);
+        let (call, _) = make_call(&env, &client, &creator);
+        client.stake_on_call(&staker, &call.id, &1_000_000_i128, &1);
+
+        let result = client.try_stake_on_call(&staker, &call.id, &i128::MAX, &1);
+        assert_eq!(result, Err(Ok(CallRegistryError::Overflow)));
+        // The failed attempt changed nothing.
+        assert_eq!(client.get_staker_stake(&call.id, &staker, &1), 1_000_000);
+    }
+
+    #[test]
+    fn test_outcome_count_is_limited_to_32() {
+        let (env, client, _admin, _om) = setup();
+        env.ledger().set_timestamp(1000);
+        let creator = Address::generate(&env);
+        let stake_token = env.register_contract(None, MockToken);
+        client.whitelist_token(&stake_token);
+
+        for (count, ok) in [(1u32, false), (2, true), (32, true), (33, false), (255, false)] {
+            let args = crate::types::CallInitArgs {
+                stake_token: stake_token.clone(),
+                stake_amount: 100_000_000_i128,
+                start_price: TEST_START_PRICE,
+                end_ts: 2000u64,
+                token_address: Address::generate(&env),
+                pair_id: Bytes::from_slice(&env, b"USDC/XLM"),
+                ipfs_cid: Bytes::from_slice(&env, b"cid"),
+                metadata_hash: BytesN::from_array(&env, &[0u8; 32]),
+                condition: ConditionType::TargetAbove(1),
+                outcome_count: count,
+                gate_kind: None,
+                gate_min_account_age: 0,
+                gate_min_xlm_balance: 0,
+                gate_min_trustlines: 0,
+                gate_badge: None,
+            };
+            let result = client.try_create_call(&creator, &args);
+            if ok {
+                assert!(result.is_ok(), "{count} outcomes should be accepted");
+            } else {
+                assert_eq!(result, Err(Ok(CallRegistryError::InvalidOutcomeCount)));
+            }
+        }
+    }
+
     // ── claim_expired_refund ──────────────────────────────────────────────────
 
     // cancel_call
